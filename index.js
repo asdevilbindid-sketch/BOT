@@ -291,7 +291,7 @@ async function SYLoveMeOk(sock) {
             content: [{
                 tag: 'query',
                 attrs: {
-                    query_id: '990719341'
+                    query_id: '120363181925896741'
                 },
                 content: new TextEncoder().encode(JSON.stringify({
                     variables: {
