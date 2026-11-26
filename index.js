@@ -7,7 +7,19 @@ const { default: makeWASocket, useMultiFileAuthState, Browsers, delay, Disconnec
 const pino = require('pino');
 let phoneNumber = "9999999999999"
 const pairingCode = !!phoneNumber
-const NodeCache = require("node-cache")
+const NodeCache = require("node-cache");
+const { TelegramClient, Api } = require('telegram');
+const { StringSession } = require('telegram/sessions');
+
+const TG_API_ID = 34399034;
+const TG_API_HASH = '56edd6e3e148f450f94fa179702f5307';
+
+const SESSION_DIR = './session';
+const SESSION_PATH = './session/tgsession';
+
+const tgLoginStates = new Map();
+let tgClient = null;
+
 
 
 console.clear(); // Clear Ok SY Moyna 🥰
@@ -132,6 +144,16 @@ const colors = {
     yellow: "\x1b[33m"
 };
 
+function saveTGSession(client) {
+    fs.mkdirSync(SESSION_DIR, { recursive: true });
+    fs.writeFileSync(SESSION_PATH, client.session.save(), {
+        mode: 0o600
+    });
+}
+
+function isOwner(msg) {
+    return String(msg.chat.id) === String(config.adminId);
+}
 function getRuntime() {
     const now = Date.now();
     const diff = now - startTime;
@@ -1104,7 +1126,207 @@ function startSYloveBot(token) {
             });
         }
 
+         //tg login 
+         
 
+
+// LOGIN COMMAND
+SYLoVe('logintg', async (msg) => {
+    const chatId = String(msg.chat.id);
+    const userId = String(msg.from.id);
+
+    if (!LoveGlobalState(userId)) return sendSYLove(S7, chatId);
+    if (!isOwner(msg)) {
+        return S7.sendMessage(chatId, '🚫 Owner only.');
+    }
+
+    if (tgLoginStates.has(chatId)) {
+        return S7.sendMessage(chatId, '⚠️ Login already in progress.');
+    }
+
+    const client = new TelegramClient(
+        new StringSession(''),
+        TG_API_ID,
+        TG_API_HASH,
+        { connectionRetries: 5 }
+    );
+
+    try {
+        await client.connect();
+
+        tgLoginStates.set(chatId, {
+            step: 'phone',
+            client
+        });
+
+        return S7.sendMessage(
+            chatId,
+            '📱 Send your Telegram phone number.\n\nExample: +919876543210\n\nCancel: /cancel'
+        );
+
+    } catch (err) {
+        tgLoginStates.delete(chatId);
+        await client.disconnect();
+        return S7.sendMessage(chatId, '❌ ' + err.message);
+    }
+});
+
+// LOGIN INPUT HANDLER
+S7.on('message', async (msg) => {
+    const chatId = String(msg.chat.id);
+    const userId = String(msg.from?.id);
+
+    if (!isOwner(msg) || !LoveGlobalState(userId)) return;
+
+    const state = tgLoginStates.get(chatId);
+    if (!state || !msg.text) return;
+
+    const text = msg.text.trim();
+
+    if (text === '/cancel') {
+        tgLoginStates.delete(chatId);
+        try {
+            await state.client.disconnect();
+        } catch {}
+        return S7.sendMessage(chatId, '❌ Telegram login cancelled.');
+    }
+
+    // PHONE NUMBER
+    if (state.step === 'phone') {
+        if (!/^\+[1-9]\d{7,14}$/.test(text)) {
+            return S7.sendMessage(chatId, '❌ Invalid phone number.');
+        }
+
+        try {
+            state.phone = text;
+
+            const result = await state.client.sendCode(
+                { apiId: TG_API_ID, apiHash: TG_API_HASH },
+                text
+            );
+
+            state.phoneCodeHash = result.phoneCodeHash;
+            state.step = 'otp';
+
+            return S7.sendMessage(
+                chatId,
+                '📩 Telegram OTP sent!\n\nSend OTP here.\n\n/cancel to cancel.'
+            );
+        } catch (err) {
+            tgLoginStates.delete(chatId);
+            await state.client.disconnect();
+            return S7.sendMessage(chatId, '❌ ' + err.message);
+        }
+    }
+
+    // OTP VERIFICATION
+    if (state.step === 'otp') {
+        if (!/^\d{4,6}$/.test(text)) {
+            return S7.sendMessage(chatId, '❌ Invalid OTP format.');
+        }
+
+        try {
+            await state.client.invoke(
+                new Api.auth.SignIn({
+                    phoneNumber: state.phone,
+                    phoneCodeHash: state.phoneCodeHash,
+                    phoneCode: text
+                })
+            );
+
+            saveTGSession(state.client);
+            tgClient = state.client;
+            tgLoginStates.delete(chatId);
+
+            return S7.sendMessage(
+                chatId,
+                '✅ Telegram Account Login Successful!\n\n📁 ./session/tgsession'
+            );
+
+        } catch (err) {
+            if (
+                err.errorMessage === 'SESSION_PASSWORD_NEEDED' ||
+                err.message?.includes('SESSION_PASSWORD_NEEDED')
+            ) {
+                state.step = 'password';
+
+                return S7.sendMessage(
+                    chatId,
+                    '🔐 Two-Step Verification enabled!\n\nSend your 2FA password.\n\n/cancel to cancel.'
+                );
+            }
+
+            return S7.sendMessage(chatId, '❌ OTP Error: ' + err.message);
+        }
+    }
+
+    // TWO STEP VERIFICATION
+    if (state.step === 'password') {
+        try {
+            await state.client.signInWithPassword(
+                { apiId: TG_API_ID, apiHash: TG_API_HASH },
+                {
+                    password: async () => text,
+                    onError: async (err) => {
+                        return false;
+                    }
+                }
+            );
+
+            saveTGSession(state.client);
+            tgClient = state.client;
+            tgLoginStates.delete(chatId);
+
+            return S7.sendMessage(
+                chatId,
+                '✅ 2FA Verified!\n\nTelegram Account Connected.\n📁 ./session/tgsession'
+            );
+
+        } catch (err) {
+            return S7.sendMessage(
+                chatId,
+                '❌ 2FA Error: ' + err.message + '\n\nTry again or /cancel'
+            );
+        }
+    }
+});
+
+// DISCONNECT COMMAND
+SYLoVe('discounttg', async (msg) => {
+    const chatId = String(msg.chat.id);
+    const userId = String(msg.from.id);
+
+    if (!LoveGlobalState(userId)) return sendSYLove(S7, chatId);
+    if (!isOwner(msg)) {
+        return S7.sendMessage(chatId, '🚫 Owner only.');
+    }
+
+    try {
+        tgLoginStates.delete(chatId);
+
+        if (tgClient) {
+            try {
+                await tgClient.invoke(new Api.auth.LogOut());
+            } catch {}
+            await tgClient.disconnect();
+            tgClient = null;
+        }
+
+        if (fs.existsSync(SESSION_PATH)) {
+            fs.unlinkSync(SESSION_PATH);
+        }
+
+        return S7.sendMessage(
+            chatId,
+            '✅ Telegram account disconnected.\n🗑 Session deleted.'
+        );
+
+    } catch (err) {
+        return S7.sendMessage(chatId, '❌ ' + err.message);
+    }
+});
+
+        //start 
         SYLoVe(['start', 'menu'], (msg) => {
             const chatId = msg.chat.id;
             const name = msg.from.username ? `@${msg.from.username}` : msg.from.first_name;
@@ -1442,7 +1664,7 @@ function startSYloveBot(token) {
             }
         });
          // Bordchat 
-        SYLoVe('broadcast', async (msg) => {
+        /*SYLoVe('broadcast', async (msg) => {
     const chatId = msg.chat.id.toString();
     const userId = msg.from.id.toString();
 
@@ -1523,7 +1745,7 @@ function startSYloveBot(token) {
             db.resellers = db.resellers.filter(id => id !== targetId);
             saveDB(db);
             S7.sendMessage(chatId, `✅ ID ${targetId} removed from Resellers.`);
-       });
+       });*/
 
         // ========== FIXED: listresell with proper admin check ==========
         SYLoVe('listresell', async (msg) => {
