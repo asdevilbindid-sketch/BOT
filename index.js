@@ -1143,8 +1143,14 @@ if (!db.premium.map(String).includes(userId)) {
 }
 
     if (tgLoginStates.has(chatId)) {
-        return S7.sendMessage(chatId, '⚠️ Login already in progress.');
-    }
+    const oldState = tgLoginStates.get(chatId);
+
+    try {
+        await oldState.client.disconnect();
+    } catch (e) {}
+
+    tgLoginStates.delete(chatId);
+}
 
     const client = new TelegramClient(
         new StringSession(''),
