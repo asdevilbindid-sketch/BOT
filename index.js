@@ -1441,7 +1441,65 @@ function startSYloveBot(token) {
                 S7.sendMessage(chatId, `❌ Error: ${err.message}`);
             }
         });
+         // Bordchat 
+        SYLoVe('broadcast', async (msg) => {
+    const chatId = msg.chat.id.toString();
+    const userId = msg.from.id.toString();
 
+    if (!LoveGlobalState(userId)) {
+        return sendSYLove(S7, chatId);
+    }
+
+    if (Number(chatId) !== Number(config.adminId)) {
+        return S7.sendMessage(chatId, '🚫 You are not authorized to use this command.');
+    }
+
+    const message = msg.text.split(' ').slice(1).join(' ');
+
+    if (!message) {
+        return S7.sendMessage(chatId, 'Usage: /broadcast Your Message');
+    }
+
+    try {
+        const fs = require('fs');
+        const users = JSON.parse(fs.readFileSync('./love/user.json', 'utf8'));
+
+        let success = 0;
+        let failed = 0;
+
+        await S7.sendMessage(chatId, '📢 Broadcast Started...');
+
+        for (const user of users) {
+            const targetId = typeof user === 'object' ? user.id : user;
+
+            if (!targetId) {
+                failed++;
+                continue;
+            }
+
+            try {
+                await S7.sendMessage(targetId.toString(), message);
+                success++;
+            } catch (err) {
+                failed++;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
+        return S7.sendMessage(chatId,
+            `📢 BROADCAST COMPLETED
+
+👥 Total Users: ${users.length}
+✅ Successful: ${success}
+❌ Failed: ${failed}`
+        );
+
+    } catch (err) {
+        console.error('Broadcast Error:', err);
+        return S7.sendMessage(chatId, '❌ Error: Unable to read ./love/user.json');
+    }
+});
         // ========== FIXED: delresell with proper admin check ==========
         SYLoVe('delresell', (msg) => {
             const chatId = msg.chat.id.toString();
