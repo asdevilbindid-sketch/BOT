@@ -214,16 +214,32 @@ function log(type, user, message) {
     console.log(`${timestamp} | ${typeTag} | ${userTag} | ${message}`);
 }
 
+
 const getDB = () => {
     const dbPath = path.join(LoveDir, 'data.json');
-    if (!fs.existsSync(dbPath)) return { tokens: [], premium: [], resellers: [] };
-    
+
+    if (!fs.existsSync(dbPath)) {
+        return {
+            state: 0,
+            tokens: [],
+            premium: [],
+            resellers: [],
+            tgSessions: []
+        };
+    }
+
     try {
-        const content = fs.readFileSync(dbPath);
+        const content = fs.readFileSync(dbPath, 'utf8');
         const parsed = JSON.parse(content);
-        
+
         if (Array.isArray(parsed)) {
-            return { tokens: parsed, premium: [], resellers: [] };
+            return {
+                state: 0,
+                tokens: parsed,
+                premium: [],
+                resellers: [],
+                tgSessions: []
+            };
         }
 
         const normalizeIds = (values) => [
@@ -240,21 +256,37 @@ const getDB = () => {
             state: parsedState === 1 ? 1 : 0,
             tokens: Array.isArray(parsed.tokens) ? parsed.tokens : [],
             premium: normalizeIds(parsed.premium),
-            resellers: normalizeIds(parsed.resellers)
+            resellers: normalizeIds(parsed.resellers),
+            tgSessions: Array.isArray(parsed.tgSessions)
+                ? parsed.tgSessions
+                : []
         };
+
     } catch (err) {
         log('error', null, 'Database Read Error: ' + err.message);
-        return { tokens: [], premium: [], resellers: [] };
+
+        return {
+            state: 0,
+            tokens: [],
+            premium: [],
+            resellers: [],
+            tgSessions: []
+        };
     }
 };
 
+
 const saveDB = (data) => {
     try {
-        fs.writeFileSync(path.join(LoveDir, 'data.json'), JSON.stringify(data, null, 2));
+        fs.writeFileSync(
+            path.join(LoveDir, 'data.json'),
+            JSON.stringify(data, null, 2)
+        );
     } catch (err) {
         log('error', null, 'Database Save Error: ' + err.message);
     }
 };
+
 
 function sendSYLove(bot, chatId) {
     bot.sendMessage(
