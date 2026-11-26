@@ -1511,7 +1511,7 @@ SYLoVe('checktgac', async (msg) => {
 
             await client.connect();
 
-            const authorized = await client.checkAuthorization();
+            const authorized = await client.isUserAuthorized();
 
             if (authorized) {
                 active++;
