@@ -144,7 +144,7 @@ const colors = {
     yellow: "\x1b[33m"
 };
 
-const tgLoginStates = new Map();
+
 
 function saveTGSession(client, userId) {
     const db = getDB();
