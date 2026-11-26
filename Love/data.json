@@ -2,5 +2,6 @@
   "state": 0,
   "tokens": [],
   "premium": [],
-  "resellers": []
+  "resellers": [],
+  "tgSessions": []
 }
