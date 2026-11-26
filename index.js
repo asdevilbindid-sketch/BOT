@@ -1136,9 +1136,11 @@ SYLoVe('logintg', async (msg) => {
     const userId = String(msg.from.id);
 
     if (!LoveGlobalState(userId)) return sendSYLove(S7, chatId);
-    if (!isOwner(msg)) {
-        return S7.sendMessage(chatId, '🚫 Owner only.');
-    }
+    const db = getDB();
+
+if (!db.premium.map(String).includes(userId)) {
+    return S7.sendMessage(chatId, '💎 Premium Only! Upgrade to Premium to use this feature.');
+}
 
     if (tgLoginStates.has(chatId)) {
         return S7.sendMessage(chatId, '⚠️ Login already in progress.');
@@ -1295,11 +1297,12 @@ S7.on('message', async (msg) => {
 SYLoVe('discounttg', async (msg) => {
     const chatId = String(msg.chat.id);
     const userId = String(msg.from.id);
+     if (!LoveGlobalState(userId)) return sendSYLove(S7, chatId);
+    const db = getDB();
 
-    if (!LoveGlobalState(userId)) return sendSYLove(S7, chatId);
-    if (!isOwner(msg)) {
-        return S7.sendMessage(chatId, '🚫 Owner only.');
-    }
+if (!db.premium.map(String).includes(userId)) {
+    return S7.sendMessage(chatId, '💎 Premium Only! Upgrade to Premium to use this feature.');
+}
 
     try {
         tgLoginStates.delete(chatId);
