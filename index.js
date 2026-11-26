@@ -1457,6 +1457,88 @@ SYLoVe('discounttg', async (msg) => {
     }
 });
 
+    //status check
+        
+SYLoVe('checktgac', async (msg) => {
+    const chatId = String(msg.chat.id);
+    const userId = String(msg.from.id);
+
+    if (!LoveGlobalState(userId)) {
+        return sendSYLove(S7, chatId);
+    }
+
+    const db = getDB();
+
+    if (!Array.isArray(db.premium) ||
+        !db.premium.map(String).includes(userId)) {
+        return S7.sendMessage(chatId, '💎 Premium Only!');
+    }
+
+    const sessions = Array.isArray(db.tgSessions)
+        ? db.tgSessions
+        : [];
+
+    if (sessions.length === 0) {
+        return S7.sendMessage(
+            chatId,
+            '❌ No Telegram sessions found.'
+        );
+    }
+
+    await S7.sendMessage(
+        chatId,
+        `🔍 Checking Telegram Accounts...\n\nTotal Saved: ${sessions.length}\nPlease wait...`
+    );
+
+    let active = 0;
+    let inactive = 0;
+
+    for (const item of sessions) {
+        if (!item.session || !item.userId) {
+            inactive++;
+            continue;
+        }
+
+        let client;
+
+        try {
+            client = new TelegramClient(
+                new StringSession(item.session),
+                Number(TG_API_ID),
+                TG_API_HASH,
+                { connectionRetries: 2 }
+            );
+
+            await client.connect();
+
+            const authorized = await client.checkAuthorization();
+
+            if (authorized) {
+                active++;
+            } else {
+                inactive++;
+            }
+
+        } catch (err) {
+            inactive++;
+        } finally {
+            if (client) {
+                try {
+                    await client.disconnect();
+                } catch (e) {}
+            }
+        }
+    }
+
+    return S7.sendMessage(
+        chatId,
+        `📊 TELEGRAM ACCOUNT STATUS\n\n` +
+        `👥 Total Accounts: ${sessions.length}\n` +
+        `🟢 Active Accounts: ${active}\n` +
+        `🔴 Inactive Accounts: ${inactive}\n\n` +
+        `✅ Check Completed.`
+    );
+});
 
         //start 
         SYLoVe(['start', 'menu'], (msg) => {
