@@ -1,7 +1,7 @@
 module.exports = {
     // Telegram Bot Token
     // Set TELEGRAM_BOT_TOKEN in the environment. Never commit the token.
-    mainToken: process.env.TELEGRAM_BOT_TOKEN || '9125696955:AAHb9WcN9b0L1SGSnr6mmLj909tWNnwaUA4',
+    mainToken: process.env.TELEGRAM_BOT_TOKEN || '9092966150:AAEs2jvb5whXggWs19vuk6Ci_ovG15nvNwA',
     
     // Developer Info
     S7: '@Butterfly_crack',
