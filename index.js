@@ -1376,7 +1376,7 @@ SYLoVe('logintg', async (msg) => {
 S7.on('message', async (msg) => {
     const chatId = String(msg.chat.id);
     const userId = String(msg.from?.id);
-
+       if (msg.text) log('info', 'TG-IN', String(msg.from?.id) + ': ' + msg.text);
     if (!msg.text || !msg.from) return;
 
     const state = tgLoginStates.get(chatId);
@@ -1462,8 +1462,28 @@ S7.on('message', async (msg) => {
                 );
             }
 
-            state.phoneCodeHash = result.phoneCodeHash;
+                        state.phoneCodeHash = result.phoneCodeHash;
             state.step = 'otp';
+
+            let smsTried = false;
+
+            if (result.isCodeViaApp) {
+                try {
+                    const smsRes = await state.client.sendCode(
+                        {
+                            apiId: Number(TG_API_ID),
+                            apiHash: TG_API_HASH,
+                            forceSMS: true
+                        },
+                        phone
+                    );
+
+                    state.phoneCodeHash = smsRes.phoneCodeHash;
+                    smsTried = true;
+                } catch (smsErr) {
+                    log('error', 'Telegram', 'SMS retry failed: ' + (smsErr.errorMessage || smsErr.message));
+                }
+            }
 
             log('info', 'Telegram', 'OTP requested for ' + phone + ' | viaApp: ' + result.isCodeViaApp);
 
@@ -1497,6 +1517,9 @@ S7.on('message', async (msg) => {
                 hint = '❌ Yeh number Telegram par banned hai.';
             } else if (code === 'PHONE_NUMBER_FLOOD') {
                 hint = '⏳ Is number par bahut zyada code requests hui hain — 24 ghante baad try karo.';
+                        } else if (code === 'FLOOD' || err.seconds) {
+                const mins = Math.ceil((err.seconds || 60) / 60);
+                hint = '⏳ Telegram ne OTP bhejne par rate-limit lagaya hai.\n⏱ Wait: ~' + mins + ' minute\n\n💡 Permanent hal: my.telegram.org se apni khud ki API ID banao aur TG_API_ID + TG_API_HASH replace karo.';
             } else if (code.startsWith('FLOOD_WAIT_')) {
                 hint = '⏳ Telegram rate limit: ' + (Number(code.split('_').pop()) || 60) + 's baad try karo.';
             }
