@@ -1769,7 +1769,9 @@ S7.on('message', async (msg) => {
       }
       return S7.sendMessage(chatId, '❌ Report Error: ' + err.message);
     }
-    
+      }
+}
+      }
     
   }
 });
