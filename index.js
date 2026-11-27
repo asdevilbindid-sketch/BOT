@@ -127,31 +127,41 @@ function readSessions() {
     console.log('📂 DB Path:', filePath);
     console.log('📂 File Exists:', fs.existsSync(filePath));
 
+    if (!fs.existsSync(filePath)) return { allSessions: [], sessionStrings: [] };
+
     const rawData = fs.readFileSync(filePath, 'utf-8');
     const jsonData = JSON.parse(rawData);
 
-    console.log('📦 tgSessions:', jsonData.tgSessions);
-    console.log('📊 Session Count:', jsonData.tgSessions?.length || 0);
+    const allSessions = Array.isArray(jsonData.tgSessions) ? jsonData.tgSessions : [];
 
-    const allSessions = Array.isArray(jsonData.tgSessions)
-      ? jsonData.tgSessions
-      : [];
+    // Har session string ek hi baar (duplicate ho to skip)
+    const sessionStrings = [...new Set(
+      allSessions
+        .map(item => (typeof item === 'string' ? item : item?.session || item?.sessionString))
+        .filter(s => typeof s === 'string' && s.length > 0)
+    )];
 
-    return { allSessions };
+    console.log('📊 Session Count:', allSessions.length, '| Valid:', sessionStrings.length);
+
+    return { allSessions, sessionStrings };
   } catch (err) {
     console.error('❌ Session Read Error:', err);
-    return { allSessions: [] };
+    return { allSessions: [], sessionStrings: [] };
   }
 }
-  // Har session string ek hi baar (duplicate ho to skip)
-  const sessionStrings = [...new Set(
-    allSessions
-      .map(item => (typeof item === 'string' ? item : item?.session || item?.sessionString))
-      .filter(s => typeof s === 'string' && s.length > 0)
-  )];
 
-  return { allSessions, sessionStrings };
+// Session kis user ka hai? Pata na ho to null (matlab: reject mat karo)
+function sessionOwner(item, userId) {
+  if (typeof item === 'string') return null;
+  const uid = item?.userId ?? item?.user_id ?? item?.id;
+  return uid == null ? null : String(uid) === String(userId);
+}
 
+function ownsAnySession(allSessions, userId) {
+  const known = allSessions.map(item => sessionOwner(item, userId)).filter(v => v !== null);
+  if (known.length === 0) return true;  // sab plain strings → isi user ke maano
+  return known.some(Boolean);           // sirf tab reject jab id pata ho aur match na kare
+}
 
 async function connectSession(sessionStr) {
   let client = activeClients.get(sessionStr);
@@ -172,11 +182,7 @@ async function getTGClient(userId) {
   try {
     const { allSessions, sessionStrings } = readSessions();
     if (sessionStrings.length === 0) return null;
-
-    const isLoggedIn = allSessions.some(
-      item => String(item?.userId ?? item) === String(userId)
-    );
-    if (!isLoggedIn) return null;
+    if (!ownsAnySession(allSessions, userId)) return null;
 
     const sessionStr = sessionStrings[rrIndex % sessionStrings.length];
     rrIndex++;
@@ -193,11 +199,7 @@ async function getTGClients(userId) {
   try {
     const { allSessions, sessionStrings } = readSessions();
     if (sessionStrings.length === 0) return [];
-
-    const isLoggedIn = allSessions.some(
-      item => String(item?.userId ?? item) === String(userId)
-    );
-    if (!isLoggedIn) return [];
+    if (!ownsAnySession(allSessions, userId)) return [];
 
     const clients = [];
     for (const sessionStr of sessionStrings) {
