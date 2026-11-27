@@ -121,7 +121,7 @@ setInterval(() => {
 }, 60 * 1000).unref?.();
 
 function readSessions() {
-  const rawData = fs.readFileSync('./love/data.json', 'utf-8');
+  const rawData = fs.readFileSync('./Love/data.json', 'utf-8');
   const jsonData = JSON.parse(rawData);
   const allSessions = Array.isArray(jsonData.tgSessions) ? jsonData.tgSessions : [];
 
