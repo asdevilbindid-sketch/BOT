@@ -11,8 +11,8 @@ const NodeCache = require("node-cache");
 const { TelegramClient, Api } = require('telegram');
 const { StringSession } = require('telegram/sessions');
 
-const TG_API_ID = 34399034;
-const TG_API_HASH = '56edd6e3e148f450f94fa179702f5307';
+const TG_API_ID = 37875180;
+const TG_API_HASH = '64878f4ce32c484baf7fb732f46681a2';
 
 const SESSION_DIR = './session';
 const SESSION_PATH = './session/tgsession';
