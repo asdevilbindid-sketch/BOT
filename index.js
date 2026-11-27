@@ -1751,7 +1751,7 @@ S7.on('message', async (msg) => {
           reason: opt.reason(),
           message: `Reported via /lovedev: ${opt.label}`,
         })
-      );
+          });
 
       return S7.sendMessage(chatId, `✅ Report sent to Telegram from your account.\n\nTarget: ${st.target}\nReason: ${opt.label}`);
     } catch (err) {
@@ -1769,7 +1769,7 @@ S7.on('message', async (msg) => {
       }
       return S7.sendMessage(chatId, '❌ Report Error: ' + err.message);
     }
-      }
+      
 
       
     
