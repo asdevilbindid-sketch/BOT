@@ -1666,7 +1666,7 @@ reportStates.set(chatId, {
   return S7.sendMessage(chatId, '👤 Send me the username to report.\n\nExample: @target\n\n/cancel to cancel');
 });
 /// 1. Login check (Loop ke BAHAR)
-let client = await getTGClient(userId);
+
 if (!client) {
   return S7.sendMessage(chatId, '❌ Pehle /logintg se apna Telegram account connect karo.');
 }
