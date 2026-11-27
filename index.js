@@ -151,7 +151,7 @@ function readSessions() {
   )];
 
   return { allSessions, sessionStrings };
-}
+
 
 async function connectSession(sessionStr) {
   let client = activeClients.get(sessionStr);
