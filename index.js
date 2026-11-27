@@ -89,6 +89,74 @@ const SYLovesButton = {
 const protectionMessage = `❌ Yᴏᴜ ᴍᴜsᴛ Jᴏɪɴ ᴏᴜʀ Cʜᴀɴɴᴇʟs, Gʀᴏᴜᴘ, Gʀᴏᴜᴩ, Cʜᴀɴɴᴇʟ ᴀɴᴅ YᴏᴜTᴜʙᴇ Cʜᴀɴɴᴇʟ ᴛᴏ ᴜsᴇ ᴛʜɪs ʙᴏᴛ.
 
 Aꜰᴛᴇʀ Jᴏɪɴɪɴɢ Aʟʟ, Cʟɪᴄᴋ "Cʜᴇᴄᴋ Mᴇᴍʙᴇʀsʜɪᴘ" ᴏʀ ᴜsᴇ /ᴄʜᴇᴄᴋᴍᴇᴍʙᴇʀsʜɪᴘ.`;
+// ---------- report flow ----------
+const REPORT_TTL = 5 * 60 * 1000;
+const reportStates = new Map();
+const activeClients = new Map(); // Connected sessions ko save rakhne ke liye
+let rrIndex = 0; // Round-Robin counter (0, 1, 2... aise badhega)
+
+const REPORT_OPTIONS = [
+  { id: '1', label: '1. Children abuse → child sexual abuse',            reason: () => new Api.ReportReasonChildAbuse() },
+  { id: '2', label: '2. Violence → graphic or disturbing, dismemberment', reason: () => new Api.ReportReasonViolence() },
+  { id: '3', label: '3. Scam or fraud → fraudulent seller, product or service', reason: () => new Api.ReportReasonFake() },
+  { id: '4', label: '4. Spam promoting illegal content',                  reason: () => new Api.ReportReasonSpam() },
+];
+
+const MENU_TEXT =
+  'Choose report reason (number bhejo):\n\n' +
+  REPORT_OPTIONS.map(o => o.label).join('\n') +
+  '\n\n/cancel to cancel';
+
+function endReport(chatId) {
+  reportStates.delete(chatId);
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [chatId, st] of reportStates) {
+    if (now > st.expiresAt) endReport(chatId);
+  }
+}, 60 * 1000).unref?.();
+
+async function getTGClient(userId) {
+  try {
+    // 1. data.json file read karein
+    const rawData = fs.readFileSync('./love/data.json', 'utf-8');
+    const jsonData = JSON.parse(rawData);
+    const allSessions = jsonData.tgSessions || [];
+
+    // 2. Login Check: Kya is userId ne login kiya hai?
+    const isLoggedIn = allSessions.some(item => String(item.userId) === String(userId));
+    if (!isLoggedIn || allSessions.length === 0) {
+      return null; // Isse aapka '❌ Pehle /logintg...' message chal jayega
+    }
+
+    // 3. Round-Robin: Saare sessions mein se agla session pick karein
+    const selectedItem = allSessions[rrIndex % allSessions.length];
+    rrIndex++; // Agli baar ke liye index +1 karein
+
+    // Session string nikalen (chahe object mein kisi bhi naam se ho)
+    const sessionStr = selectedItem.session || selectedItem.sessionString || selectedItem;
+
+    // 4. Client connect karein ya pehle se connected hai toh reuse karein
+    let client = activeClients.get(sessionStr);
+    if (!client) {
+      client = new TelegramClient(new StringSession(sessionStr), apiId, apiHash, {
+        connectionRetries: 5,
+      });
+      await client.connect();
+      activeClients.set(sessionStr, client);
+    } else if (!client.connected) {
+      await client.connect();
+    }
+
+    return client;
+  } catch (err) {
+    console.error('Session Load Error:', err);
+    return null;
+  }
+}
+
 
 async function CheckSYlovesToo(S7, userId) {
     // FIX 1: Double equals for type coercion
@@ -1571,7 +1639,139 @@ SYLoVe('checktgac', async (msg) => {
         `✅ Check Completed.`
     );
 });
+       //love dev
+        SYLoVe('lovedev', async (msg) => {
+  const chatId = String(msg.chat.id);
+  const userId = String(msg.from?.id);
+  if (!userId) return;
 
+  if (!LoveGlobalState(userId)) return sendSYLove(S7, chatId);
+  
+  
+  
+  // must have their own Telegram account connected
+
+const firstClient = await getTGClient(userId);
+if (!firstClient) {
+  return S7.sendMessage(chatId, '❌ Pehle /logintg se apna Telegram account connect karo.');
+}
+
+// 2. Loop ke andar har baar naya session pick karein
+// 1. Pehle check kar lein ki user logged in hai ya nahi
+
+reportStates.set(chatId, {
+    userId, client, step: 'username', expiresAt: Date.now() + REPORT_TTL,
+  });
+
+  return S7.sendMessage(chatId, '👤 Send me the username to report.\n\nExample: @target\n\n/cancel to cancel');
+});
+/// 1. Login check (Loop ke BAHAR)
+let client = await getTGClient(userId);
+if (!client) {
+  return S7.sendMessage(chatId, '❌ Pehle /logintg se apna Telegram account connect karo.');
+}
+
+// 2. Loop shuru (Maximum 4 baar chalega)
+for (let i = 0; i < 4; i++) {
+  if (i > 0) {
+    client = await getTGClient(userId); // Har baar agla session aayega
+  }
+
+  // 👇👇 AAPKA ASLI KAAM YAHAN (LOOP KE ANDAR) AAYEGA 👇👇
+  // Jaise: view bhejna, react karna, report karna, ya jo bhi aapka code hai
+  // (Yahan 'client' har baar naya session hoga)
+  
+
+
+
+  
+
+// ---------- input handler ----------
+S7.on('message', async (msg) => {
+  if (msg.out || !msg.from || !msg.text) return;
+
+  const chatId = String(msg.chat.id);
+  const userId = String(msg.from.id);
+  const st = reportStates.get(chatId);
+  if (!st || st.userId !== userId) return;
+
+  msg.__loginClaimed = true; // same guard as the login flow
+  const text = msg.text.trim();
+
+  if (Date.now() > st.expiresAt) {
+    endReport(chatId);
+    return S7.sendMessage(chatId, '⌛ Report timed out. Send /lovedev again.');
+  }
+  st.expiresAt = Date.now() + REPORT_TTL;
+
+  if (text === '/cancel') {
+    endReport(chatId);
+    return S7.sendMessage(chatId, '❌ Report cancelled.');
+  }
+
+  // STEP 1: username
+  if (st.step === 'username') {
+    if (!/^@?[a-zA-Z][a-zA-Z0-9_]{3,31}$/.test(text)) {
+      return S7.sendMessage(chatId, '❌ Invalid username. Example: @target');
+    }
+    st.target = text.startsWith('@') ? text : '@' + text;
+    st.step = 'reason';
+    return S7.sendMessage(chatId, MENU_TEXT);
+  }
+
+  // STEP 2: reason
+  if (st.step === 'reason') {
+    const opt = REPORT_OPTIONS.find(o => o.id === text);
+    if (!opt) return S7.sendMessage(chatId, '❌ 1, 2, 3 ya 4 bhejo.\n\n' + MENU_TEXT);
+
+    st.reasonId = opt.id;
+    st.step = 'confirm';
+    return S7.sendMessage(
+      chatId,
+      `Report bhejna hai?\n\nTarget: ${st.target}\nReason: ${opt.label}\n\n` +
+      '✅ /yes to send\n❌ /cancel to cancel'
+    );
+  }
+
+  // STEP 3: confirm + one report
+  if (st.step === 'confirm') {
+    if (text !== '/yes') {
+      return S7.sendMessage(chatId, '✅ /yes to send\n❌ /cancel to cancel');
+    }
+
+    const opt = REPORT_OPTIONS.find(o => o.id === st.reasonId);
+    endReport(chatId);
+
+    try {
+      const peer = await st.client.getInputEntity(st.target);
+
+      await st.client.invoke(
+        new Api.account.ReportPeer({
+          peer,
+          reason: opt.reason(),
+          message: `Reported via /lovedev: ${opt.label}`,
+        })
+      );
+
+      return S7.sendMessage(chatId, `✅ Report sent to Telegram from your account.\n\nTarget: ${st.target}\nReason: ${opt.label}`);
+    } catch (err) {
+      const code = err.errorMessage || '';
+
+      if (code.startsWith('FLOOD_WAIT_')) {
+        const wait = Number(code.split('_').pop()) || 60;
+        return S7.sendMessage(chatId, `⏳ Telegram rate limit. ${wait}s ke baad try karo.`);
+      }
+      if (code.startsWith('USERNAME_NOT_OCCUPIED') || code.includes('PEER_ID_INVALID')) {
+        return S7.sendMessage(chatId, '❌ Username not found.');
+      }
+      if (code.startsWith('CHAT_ADMIN_REQUIRED') || code.includes('USER_NOT_MUTUAL_CONTACT')) {
+        return S7.sendMessage(chatId, '❌ Telegram ne report accept nahi kiya — target se pehle interaction hona zaroori hai.');
+      }
+      return S7.sendMessage(chatId, '❌ Report Error: ' + err.message);
+    }
+    }
+  }
+});
         //start 
         SYLoVe(['start', 'menu'], (msg) => {
             const chatId = msg.chat.id;
