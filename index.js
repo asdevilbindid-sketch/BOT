@@ -1416,28 +1416,64 @@ S7.on('message', async (msg) => {
     if (text.startsWith('/')) return;
 
     // PHONE NUMBER
+        // PHONE NUMBER
     if (state.step === 'phone') {
-        if (!/^\+[1-9]\d{7,14}$/.test(text)) {
-            return S7.sendMessage(chatId, '❌ Invalid phone number. Country code ke saath bhejo.');
+        const phone = text.replace(/[\s\-()]/g, '');
+
+        if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+            return S7.sendMessage(chatId, '❌ Invalid phone number. Country code ke saath bhejo. Example: +919876543210');
         }
 
         try {
-            state.phone = text;
+            state.phone = phone;
 
-            const result = await state.client.sendCode(
-                {
-                    apiId: Number(TG_API_ID),
-                    apiHash: TG_API_HASH
-                },
-                text
-            );
+            let result;
+
+            try {
+                result = await state.client.sendCode(
+                    {
+                        apiId: Number(TG_API_ID),
+                        apiHash: TG_API_HASH
+                    },
+                    phone
+                );
+            } catch (firstErr) {
+                const firstCode = firstErr.errorMessage || '';
+
+                // API / number ki problem ho to SMS try karna bekaar hai
+                if (
+                    firstCode.startsWith('API_ID') ||
+                    firstCode.startsWith('PHONE_NUMBER_') ||
+                    firstCode.startsWith('FLOOD') ||
+                    firstCode.startsWith('PHONE_CODE_')
+                ) {
+                    throw firstErr;
+                }
+
+                log('info', 'Telegram', 'Normal sendCode failed (' + firstCode + '), trying forceSMS');
+
+                result = await state.client.sendCode(
+                    {
+                        apiId: Number(TG_API_ID),
+                        apiHash: TG_API_HASH,
+                        forceSMS: true
+                    },
+                    phone
+                );
+            }
 
             state.phoneCodeHash = result.phoneCodeHash;
             state.step = 'otp';
 
+            log('info', 'Telegram', 'OTP requested for ' + phone + ' | viaApp: ' + result.isCodeViaApp);
+
             return S7.sendMessage(
                 chatId,
-                '📩 Telegram OTP sent!\n\nAb OTP yahan bhejo.\n\n/cancel to cancel.'
+                '📩 OTP request bhej di gayi.\n\n' +
+                (result.isCodeViaApp
+                    ? '👉 Code SMS par nahi, aapke Telegram app ke "Telegram" chat mein aaya hai.'
+                    : '👉 Code SMS par bheja gaya hai.') +
+                '\n\nAb OTP yahan bhejo.\n\n/cancel to cancel.'
             );
         } catch (err) {
             tgLoginStates.delete(chatId);
@@ -1446,7 +1482,29 @@ S7.on('message', async (msg) => {
                 await state.client.disconnect();
             } catch (e) {}
 
-            return S7.sendMessage(chatId, '❌ OTP Send Error: ' + err.message);
+            const code = err.errorMessage || '';
+            const phoneNumber = text;
+
+            log('error', 'Telegram', 'OTP Send Error: ' + (code || err.message));
+
+            let hint = '';
+
+            if (code === 'API_ID_INVALID' || code === 'API_ID_PUBLISHED_FLOOD') {
+                hint = '❌ API ID/Hash galat ya leaked hai. my.telegram.org se apni app banao aur uski API ID + API HASH dono replace karo.';
+            } else if (code === 'PHONE_NUMBER_INVALID') {
+                hint = '❌ Number galat hai. Country code ke saath dobara bhejo.';
+            } else if (code === 'PHONE_NUMBER_BANNED') {
+                hint = '❌ Yeh number Telegram par banned hai.';
+            } else if (code === 'PHONE_NUMBER_FLOOD') {
+                hint = '⏳ Is number par bahut zyada code requests hui hain — 24 ghante baad try karo.';
+            } else if (code.startsWith('FLOOD_WAIT_')) {
+                hint = '⏳ Telegram rate limit: ' + (Number(code.split('_').pop()) || 60) + 's baad try karo.';
+            }
+
+            return S7.sendMessage(
+                chatId,
+                '❌ OTP Send Error: ' + (code || err.message) + (hint ? '\n\n' + hint : '')
+            );
         }
     }
 
