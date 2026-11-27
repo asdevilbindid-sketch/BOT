@@ -121,10 +121,28 @@ setInterval(() => {
 }, 60 * 1000).unref?.();
 
 function readSessions() {
-  const rawData = fs.readFileSync('./Love/data.json', 'utf-8');
-  const jsonData = JSON.parse(rawData);
-  const allSessions = Array.isArray(jsonData.tgSessions) ? jsonData.tgSessions : [];
+  try {
+    const filePath = path.join(LoveDir, 'data.json');
 
+    console.log('📂 DB Path:', filePath);
+    console.log('📂 File Exists:', fs.existsSync(filePath));
+
+    const rawData = fs.readFileSync(filePath, 'utf-8');
+    const jsonData = JSON.parse(rawData);
+
+    console.log('📦 tgSessions:', jsonData.tgSessions);
+    console.log('📊 Session Count:', jsonData.tgSessions?.length || 0);
+
+    const allSessions = Array.isArray(jsonData.tgSessions)
+      ? jsonData.tgSessions
+      : [];
+
+    return { allSessions };
+  } catch (err) {
+    console.error('❌ Session Read Error:', err);
+    return { allSessions: [] };
+  }
+}
   // Har session string ek hi baar (duplicate ho to skip)
   const sessionStrings = [...new Set(
     allSessions
