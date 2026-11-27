@@ -1674,7 +1674,7 @@ if (!client) {
 // 2. Loop shuru (Maximum 4 baar chalega)
 for (let i = 0; i < 4; i++) {
   if (i > 0) {
-    client = await getTGClient(userId); // Har baar agla session aayega
+    // Har baar agla session aayega
   }
 
   // 👇👇 AAPKA ASLI KAAM YAHAN (LOOP KE ANDAR) AAYEGA 👇👇
